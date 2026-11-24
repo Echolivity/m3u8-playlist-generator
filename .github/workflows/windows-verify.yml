@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 env:
-  RELEASE_SHA: 04a391b4001e297a9f7b3cdbbb782cccd54199a3
+  RELEASE_SHA: fda6bbf6ded75f2eadd950dc880cf7573d50c296
 
 jobs:
   verify:
@@ -48,7 +48,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898277+github-actions[bot]@users.noreply.github.com"
           git checkout -B ci/windows-results
-          git add -f ci-environment.txt ci-test-log.txt tests/results/windows-ps51.md
+          for %%F in (ci-environment.txt ci-test-log.txt tests\results\windows-ps51.md) do if exist %%F git add -f %%F
           git commit -m "Windows verification results for %RELEASE_SHA% (run %GITHUB_RUN_ID%)"
           git push -f origin ci/windows-results
 
