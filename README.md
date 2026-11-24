@@ -7,10 +7,11 @@
 
 A lightweight, standalone Windows utility that scans your music folders and creates clean, naturally sorted **M3U8 playlists** — one playlist for every folder containing audio.
 
-[**Download the generator**](Generate-M3U8-FIXED.bat)
+[**Download the generator**](https://github.com/Echolivity/m3u8-playlist-generator/releases/latest/download/Generate-M3U8.bat)
 
+![Version](https://img.shields.io/badge/version-1.0.1-6C5CE7?style=flat-square)
 ![Windows](https://img.shields.io/badge/platform-Windows-2675E8?style=flat-square&logo=windows)
-![PowerShell](https://img.shields.io/badge/runtime-built--in%20PowerShell-5391FE?style=flat-square&logo=powershell)
+![PowerShell](https://img.shields.io/badge/runtime-Windows%20PowerShell%205.1-5391FE?style=flat-square&logo=powershell)
 ![M3U8](https://img.shields.io/badge/output-M3U8-6C5CE7?style=flat-square)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-16A085?style=flat-square)
 
@@ -22,7 +23,7 @@ A lightweight, standalone Windows utility that scans your music folders and crea
 
 A simple utility for people with local music libraries.
 
-Place the BAT file in your library, run it, and it recursively scans the folder structure. Every folder containing supported audio gets its own M3U8 playlist.
+Place the BAT file in your library, run it, and it recursively scans the folder structure. Every folder containing supported audio gets its own M3U8 playlist. Run it again whenever your library changes and the playlists follow.
 
 No database. No configuration. No separate script to install.
 
@@ -30,6 +31,7 @@ No database. No configuration. No separate script to install.
 
 ```text
 Your Music/
+├── Generate-M3U8.bat
 ├── Artist A/
 │   ├── Album One/
 │   │   ├── 01 - Track One.flac
@@ -39,44 +41,142 @@ Your Music/
 │       ├── 01 - Intro.mp3
 │       ├── 02 - Main Theme.mp3
 │       └── Album Two.m3u8
-├── Artist B/
-│   ├── Track 1.ogg
-│   ├── Track 2.ogg
-│   └── Artist B.m3u8
-└── Your Music.m3u8
+└── Artist B/
+    ├── Track 1.ogg
+    ├── Track 2.ogg
+    └── Artist B.m3u8
 ```
 
-Each playlist contains files directly inside its folder. Subfolders are scanned independently.
-
-## Features
-
-- **Recursive scanning** — walks through the library and its subfolders.
-- **Natural filename sorting** — `Track 2` comes before `Track 10`.
-- **One playlist per folder** — folders containing supported audio get a playlist.
-- **Relative filenames** — paths are relative to the playlist's own folder.
-- **UTF-8 without BOM** — clean text output.
-- **Smart updates** — unchanged playlists are left untouched.
-- **Safer traversal** — skips directory junctions and symbolic links.
-- **Standalone** — PowerShell is embedded in the BAT file.
-
-## Supported formats
-
-`MP3` · `FLAC` · `WAV` · `AAC` · `M4A` · `OGG` · `OPUS` · `WMA` · `AIFF` · `AIF`
+Each playlist lists the audio files directly inside its own folder. Subfolders get their own playlists. A folder without audio gets no playlist.
 
 ## Get started
 
-1. Download `Generate-M3U8-FIXED.bat`.
+1. Download `Generate-M3U8.bat` from the [latest release](https://github.com/Echolivity/m3u8-playlist-generator/releases/latest).
 2. Place it in the root folder of your music library.
-3. Double-click the BAT file.
-4. Review the generation summary.
-5. Open the generated playlists in a compatible music player.
+3. Double-click it.
+4. Read the summary, then press any key to close the window.
+5. Open the playlists in your music player.
+
+The folder that contains the BAT file is the library root; the BAT file needs nothing else and can be copied anywhere.
+
+For scheduled or scripted runs, set `M3U8_NO_PAUSE=1` to skip the final key press:
+
+```bat
+set M3U8_NO_PAUSE=1
+call "D:\Music\Generate-M3U8.bat"
+```
+
+## Supported formats
+
+`MP3` · `FLAC` · `WAV` · `AAC` · `M4A` · `OGG` · `OPUS` · `WMA` · `AIFF` · `AIF` (any letter case)
+
+## Behaviour in detail
+
+### Playlist naming and folders
+
+- Each playlist is named after its folder: `Album One\Album One.m3u8`. At a drive root, which has no folder name, the playlist is called `playlist.m3u8`.
+- Folders are scanned recursively. Hidden or system folders (for example `$RECYCLE.BIN`, `System Volume Information`) are skipped, as are junctions and symbolic links, so nothing is listed twice and loops are impossible. OneDrive folders are scanned normally.
+- Hidden or system files and macOS `._` leftovers are ignored.
+
+### Sorting
+
+Files are sorted the way Windows Explorer sorts them: numbers by value (`Track 2` before `Track 10`), letters case-insensitively. If Explorer's sorting function can't be loaded, a built-in natural sort with the same number rule is used and a warning is shown.
+
+### Paths and encoding
+
+- Entries are bare file names relative to the playlist's own folder, so a folder can be moved or copied with its playlist intact.
+- A file whose name starts with `#` or a space is written as `.\#1 Hit.mp3`, because players would otherwise read the line as a comment or trim it.
+- Playlists are UTF-8 without a BOM, with Windows (CRLF) line endings. Every Unicode name is supported. A name that cannot be represented in UTF-8 (a damaged name with an unpaired surrogate) is left out and reported, never written in a mangled form.
+
+### Playlist ownership and protection
+
+The tool only ever changes playlists it can prove it wrote. Every generated playlist has this second line, which players treat as a comment:
+
+```text
+# Generated by M3U8 Playlist Generator (Echolivity)
+```
+
+A playlist counts as generated only if *every* line matches the tool's exact format: `#EXTM3U`, the tag, then pairs of `#EXTINF:-1,<title>` and a supported audio file name whose title is that file name without its extension. Anything else — absolute paths, URLs, durations, renamed titles, extra lines, empty files, files that are not valid UTF-8 — is treated as yours and never changed or deleted. It is reported as **Kept (not ours)**.
+
+Playlists written before v1.0.0 have no tag. If one matches the old format exactly, it is updated (and gains the tag); it is never deleted.
+
+The tool owns any `<folder>.m3u8` that carries the tag and matches that format, and rewrites it whenever the folder changes. To keep a customised version, save it under another name, or delete the tag line.
+
+A **read-only** playlist is treated as deliberately locked: it is neither updated nor removed, and is reported as **Kept (read-only)**. This is not counted as an error.
+
+### Stale playlist cleanup
+
+On every run the tool compares each folder with its playlists:
+
+| Situation | What happens |
+|---|---|
+| Tracks added, deleted, moved or renamed | The folder's playlist is rewritten to match. |
+| Folder no longer contains audio | Its generated `<folder>.m3u8` is removed. |
+| Folder was renamed | A new playlist is created. The old-named playlist is removed if its content is identical to the new one. |
+| A generated playlist was copied, trimmed, reordered or edited | Kept, because it isn't provably stale. |
+| Playlist has no tag (yours, or pre-1.0.0) | Never removed. |
+| Folder could not be read completely | Nothing in it is written or removed; an error is reported. |
+
+Removed playlists are deleted, not moved to the Recycle Bin. They contain nothing that is not regenerated from your files.
+
+### Safe writing
+
+A playlist is first written in full to a work file (`~M3U8-xxxxxxxxxxxxxxxx.tmp`) in the same folder and flushed to disk. A new playlist is then renamed into place. An existing one is swapped in with Windows' `ReplaceFile`, keeping the old version as a backup until the swap succeeds, and restoring it if the swap fails part-way. If writing fails, the existing playlist is left exactly as it was.
+
+`ReplaceFile` is not guaranteed to be atomic on every file system (some network shares in particular). If the computer loses power or the window is closed at exactly the wrong moment, the worst case is a missing playlist, which the next run recreates, plus a leftover work file. Leftover `~M3U8-…` files older than 10 minutes are cleaned up on the next run; a leftover backup is only removed if it is a recognised generated playlist.
+
+## Execution summary and exit codes
+
+The window ends with a summary:
+
+```text
+Folders scanned      : 1001
+Tracks indexed       : 10000
+Playlists created    : 500
+Playlists updated    : 0
+Playlists unchanged  : 0
+Stale removed        : 0
+Kept (not ours)      : 0
+Kept (read-only)     : 0
+Work files cleaned   : 0
+Links skipped        : 0
+Hidden/system skipped: 0
+Errors               : 0
+```
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Completed successfully. |
+| `1` | Completed, but something could not be read or written; see the warnings. Everything that could be processed was. |
+| `2` | Stopped before scanning (for example, the BAT file was damaged). Nothing was changed. |
 
 ## Requirements
 
-- Windows
-- Built-in Windows PowerShell
+- Windows 10 or 11 (Windows 7/8.1 with Windows PowerShell 5.1 should work but is untested).
+- Windows PowerShell 5.1, which is built into Windows. PowerShell 7 is not required.
+- No third-party dependencies, no installation, no administrator rights.
 
-No third-party dependencies.
+## Known limitations
+
+- **Long paths:** folders or files with paths longer than 260 characters are reported as errors and skipped, because Windows PowerShell 5.1 does not support long paths by default.
+- **Hidden music folders** are skipped by design. Unhide a folder to include it.
+- **One playlist per folder:** there is no combined playlist across subfolders (for example, a whole artist).
+- **Tags are not read:** titles in the playlist come from file names, and the duration is written as `-1` (unknown).
+- **Network shares:** playlists are written safely, but the replacement step is not guaranteed to be atomic on every server.
+- **Restricted PCs:** in PowerShell Constrained Language mode (enforced by some corporate policies) the tool cannot run.
+- **Two runs at once** on the same library are not coordinated. Run one at a time.
+
+## Testing
+
+`tests\Run-Tests.ps1` builds temporary libraries and checks 27 scenarios, including Unicode names, natural sorting, protection of hand-made playlists, stale cleanup, hidden/system files, links, read-only files, failed and interrupted writes, and a 10,000-file library. See [docs/TEST-REPORT.md](docs/TEST-REPORT.md) for the latest results.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests\Run-Tests.ps1 -Report tests\results\windows.md
+```
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ---
 

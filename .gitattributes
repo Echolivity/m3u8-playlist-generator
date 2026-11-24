@@ -1,0 +1,4 @@
+# Batch files must keep Windows (CRLF) line endings or cmd labels and goto
+# misbehave. Store them byte-for-byte so raw and release downloads stay CRLF.
+*.bat -text
+*.cmd -text
