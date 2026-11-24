@@ -1,0 +1,58 @@
+# Release verification for Generate-M3U8.bat on real Windows.
+# Lives only on the ci/windows-verify branch; tests a pinned release commit.
+name: Windows release verification
+
+on:
+  push:
+    branches: [ci/windows-verify]
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_SHA: 04a391b4001e297a9f7b3cdbbb782cccd54199a3
+
+jobs:
+  verify:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 1
+
+      - name: Record environment
+        shell: cmd
+        run: |
+          ver > ci-environment.txt
+          powershell.exe -NoProfile -Command "$PSVersionTable | Format-Table -AutoSize | Out-String -Width 200" >> ci-environment.txt
+          powershell.exe -NoProfile -Command "'.NET Framework Release key: ' + (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full').Release + ' (528040+ = 4.8)'; 'User: ' + [Environment]::UserName + '  Elevated: ' + ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); 'Release commit: ' + $env:RELEASE_SHA; 'BAT bytes CRLF check: ' + ([IO.File]::ReadAllText('Generate-M3U8.bat').Contains(\"`r`n\"))" >> ci-environment.txt
+          type ci-environment.txt
+
+      - name: Run test suite (cmd.exe -> Windows PowerShell 5.1)
+        id: tests
+        continue-on-error: true
+        shell: cmd
+        run: |
+          if not exist tests\results mkdir tests\results
+          powershell -NoProfile -ExecutionPolicy Bypass -File tests\Run-Tests.ps1 -Report tests\results\windows-ps51.md > ci-test-log.txt 2>&1
+          set CODE=%ERRORLEVEL%
+          type ci-test-log.txt
+          echo Test suite exit code: %CODE%>> ci-test-log.txt
+          exit /b %CODE%
+
+      - name: Publish results to ci/windows-results branch
+        if: always()
+        shell: cmd
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898277+github-actions[bot]@users.noreply.github.com"
+          git checkout -B ci/windows-results
+          git add -f ci-environment.txt ci-test-log.txt tests/results/windows-ps51.md
+          git commit -m "Windows verification results for %RELEASE_SHA% (run %GITHUB_RUN_ID%)"
+          git push -f origin ci/windows-results
+
+      - name: Fail if tests failed
+        if: steps.tests.outcome != 'success'
+        shell: cmd
+        run: exit /b 1
