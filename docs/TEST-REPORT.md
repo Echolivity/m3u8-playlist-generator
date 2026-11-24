@@ -1,7 +1,36 @@
 # Test execution report — Generate-M3U8.bat v1.0.1
 
-**Status: passed on Linux / PowerShell 7. Not yet run on Windows / Windows PowerShell 5.1.**
-v1.0.1 must not be called production-ready until the Windows run below has passed.
+**Status: passed on real Windows (Windows PowerShell 5.1, .NET Framework 4.8.1): 0 failures, 27 of 27 scenarios run.** It also passed on Linux / PowerShell 7.
+
+## 0. Windows release verification (2026-11-25)
+
+| Item | Detail |
+|---|---|
+| Machine | GitHub-hosted runner `windows-2022`: Windows Server 2022, build 10.0.20348.5870, NTFS |
+| Runtime | Windows PowerShell 5.1.20348.5773 (Desktop), CLR 4.0.30319.42000, .NET Framework release key 533509 (4.8.1) |
+| Account | `runneradmin`, elevated. The NTFS deny-ACL tests (16a, 16e) still took effect. |
+| Commit tested | `fda6bbf6ded75f2eadd950dc880cf7573d50c296` (`release/v1.0.1`) |
+| Command | `powershell -NoProfile -ExecutionPolicy Bypass -File tests\Run-Tests.ps1 -Report tests\results\windows-ps51.md`, started from `cmd.exe` |
+| Launcher | Each test copies the real BAT into its library and runs it through `cmd.exe /d /c`; the BAT starts `powershell.exe` 5.1 itself |
+| Workflow run | [45508986480](https://github.com/Echolivity/m3u8-playlist-generator/actions/runs/45508986480) (workflow on branch `ci/windows-verify` only) |
+| Result | **22 PASS (executed), 5 PASS\* (fault-injected), 0 SKIP, 0 FAIL**; job exit code 0 |
+| Evidence files | [`tests/results/windows-ps51.md`](../tests/results/windows-ps51.md), [`windows-ps51-console.txt`](../tests/results/windows-ps51-console.txt), [`windows-ps51-environment.txt`](../tests/results/windows-ps51-environment.txt) |
+
+Gate checks:
+
+- Test 12 (System files) and 13 (Hidden and System folders): **Executed** with real NTFS attributes. No simulation.
+- Test 14: **Executed**, with both a junction and a symbolic link.
+- Test 19 (unpaired-surrogate file name): **Executed**.
+- Test 05: Explorer sorting (`StrCmpLogicalW`) in use, with no fallback warning.
+- `File.Replace` on NTFS: run for real by every update test (07, 07b, 10, 18), with no work files left behind.
+- Backup restoration (16c): run on NTFS. The failure is injected (the old file is moved aside, then an exception is thrown); the restore code itself ran unmodified.
+- Unicode names (04): accents, CJK and emoji on NTFS.
+- NTFS permissions: read-only attribute (15) and deny ACLs set with `icacls` for writing (16a) and listing (16e).
+- Large library (17): 10,000 files / 1,001 folders. First run 6.1 s; unchanged rerun 0.7 s.
+
+The first Windows run (run 45508762740, commit `04a391b`) found one defect in the **test harness**, not the generator: Windows PowerShell 5.1 leaves `$PSScriptRoot` empty in `param()` defaults, so the suite stopped before any test ran. It was fixed in `fda6bbf`, and the complete suite was rerun (above).
+
+The sections below are the earlier Linux run, kept for reference.
 
 ## 1. What was run, and where
 
@@ -89,9 +118,9 @@ PSScriptAnalyzer 1.24.0 checked the code against its bundled **Windows PowerShel
 
 This confirms the syntax, commands and .NET members exist in 5.1. It does **not** confirm runtime behaviour.
 
-## 5. Not executed, and why
+## 5. Not executed on Linux, and why
 
-These must be run on Windows before release:
+All of the following have since run on Windows (§0), except OneDrive, paths over 260 characters and .NET Framework memory measurement:
 
 | What | Why not run here | How it's covered for now |
 |---|---|---|
