@@ -38,7 +38,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Bat = (Join-Path (Split-Path -Parent $PSScriptRoot) 'Generate-M3U8.bat'),
+    [string]$Bat = '',
     [int]$LargeCount = 10000,
     [string]$Only = '',
     [string]$Report = ''
@@ -46,6 +46,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
+
+# Windows PowerShell 5.1 leaves $PSScriptRoot empty inside param() defaults,
+# so the default BAT path is resolved here instead.
+if (-not $Bat) {
+    $Here = $PSScriptRoot
+    if (-not $Here) { $Here = Split-Path -Parent $MyInvocation.MyCommand.Path }
+    $Bat = Join-Path (Split-Path -Parent $Here) 'Generate-M3U8.bat'
+}
 
 $OnWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 $Utf8 = [System.Text.UTF8Encoding]::new($false)
